@@ -54,7 +54,12 @@ final class TiboForecastModel: ObservableObject {
         }
     }
 
-    private static func fetch() async throws -> Data {
+    static func fetch(environment: [String: String] = ProcessInfo.processInfo.environment) async throws -> Data {
+        // Development builds opt out of the public forecast endpoint here, so the
+        // startup poll, the timer and a direct refresh are all covered by one guard.
+        guard !ForecastNetworkGuard.isDisabled(environment: environment) else {
+            throw ForecastNetworkGuard.disabledError
+        }
         let url = URL(string: "https://codex-reset.com/api/forecast")!
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
         request.setValue(
