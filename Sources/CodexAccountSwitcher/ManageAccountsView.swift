@@ -112,6 +112,28 @@ struct ManageAccountsView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(model.isMutating || model.isAddingAccount)
+
+                #if os(macOS)
+                Button {
+                    UsageStatsWindowController.open(
+                        store: model.usageStatsStore,
+                        accounts: model.accounts,
+                        language: model.settings.language
+                    )
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "chart.bar")
+                            .frame(width: 14)
+                        Text(model.text("usage_stats"))
+                        Spacer()
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 8)
+                    .frame(height: 30)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                #endif
             }
             .padding(5)
         }

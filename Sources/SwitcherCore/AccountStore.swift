@@ -1,6 +1,8 @@
 import Foundation
 #if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
 #endif
 #if os(Windows)
 import SwitcherPlatform
@@ -19,8 +21,8 @@ public protocol AccountStoring: Sendable {
 }
 
 public actor AccountStore: AccountStoring {
-    public let baseURL: URL
-    public let activeHomeURL: URL
+    public nonisolated let baseURL: URL
+    public nonisolated let activeHomeURL: URL
 
     private let fileManager: FileManager
     private let legacyBaseURL: URL?
@@ -47,8 +49,10 @@ public actor AccountStore: AccountStoring {
             self.baseURL = baseURL
             self.legacyBaseURL = legacyBaseURL
         } else {
+            let directoryName = ProcessInfo.processInfo.environment["SWITCHER_DATA_DIR_NAME"]
+                ?? "Codex Account Switcher"
             self.baseURL = applicationSupportURL.appending(
-                path: "Codex Account Switcher",
+                path: directoryName,
                 directoryHint: .isDirectory
             )
             self.legacyBaseURL = applicationSupportURL.appending(
@@ -426,7 +430,7 @@ public actor AccountStore: AccountStoring {
         let temporary = destination
             .deletingLastPathComponent()
             .appending(path: "\(destination.lastPathComponent).switcher-\(UUID().uuidString).tmp")
-        let descriptor = Darwin.open(
+        let descriptor = open(
             temporary.path,
             O_WRONLY | O_CREAT | O_EXCL,
             S_IRUSR | S_IWUSR
@@ -438,7 +442,7 @@ public actor AccountStore: AccountStoring {
                 guard let baseAddress = rawBuffer.baseAddress else { return }
                 var offset = 0
                 while offset < rawBuffer.count {
-                    let count = Darwin.write(
+                    let count = write(
                         descriptor,
                         baseAddress.advanced(by: offset),
                         rawBuffer.count - offset
@@ -447,15 +451,15 @@ public actor AccountStore: AccountStoring {
                     offset += count
                 }
             }
-            guard Darwin.fsync(descriptor) == 0 else { throw currentPOSIXError() }
-            guard Darwin.close(descriptor) == 0 else { throw currentPOSIXError() }
+            guard fsync(descriptor) == 0 else { throw currentPOSIXError() }
+            guard close(descriptor) == 0 else { throw currentPOSIXError() }
         } catch {
-            _ = Darwin.close(descriptor)
+            _ = close(descriptor)
             try? fileManager.removeItem(at: temporary)
             throw error
         }
 
-        if Darwin.rename(temporary.path, destination.path) != 0 {
+        if rename(temporary.path, destination.path) != 0 {
             let error = currentPOSIXError()
             try? fileManager.removeItem(at: temporary)
             throw error

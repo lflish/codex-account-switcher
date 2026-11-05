@@ -19,6 +19,7 @@ open class AccountController {
     public private(set) var activeIdentityConfirmed = true { didSet { onChange?() } }
 
     private let store: AccountStore
+    public var usageStatsStore: AccountStore { store }
     private let codex: any AccountClient
     private let switchService: any SwitchServicing
     private var hasStarted = false
