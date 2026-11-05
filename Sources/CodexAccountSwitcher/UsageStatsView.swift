@@ -380,7 +380,7 @@ struct UsageStatsView: View {
 // MARK: - Window opener (follows existing project pattern)
 
 enum UsageStatsWindowController {
-    private static var windowController: NSWindowController?
+    @MainActor private static var windowController: NSWindowController?
 
     @MainActor
     static func open(store: AccountStore, accounts: [AccountProfile], language: AppLanguage) {

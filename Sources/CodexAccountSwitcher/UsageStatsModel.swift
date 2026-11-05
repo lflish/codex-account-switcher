@@ -72,9 +72,11 @@ final class UsageStatsModel: ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
 
-        let profilePairs: [(profile: AccountProfile, profileHome: URL)] = await accounts.asyncMap { account in
+        var profilePairs: [(profile: AccountProfile, profileHome: URL)] = []
+        profilePairs.reserveCapacity(accounts.count)
+        for account in accounts {
             let home = await store.profileHome(id: account.id)
-            return (profile: account, profileHome: home)
+            profilePairs.append((profile: account, profileHome: home))
         }
 
         syncResults = await service.sync(accounts: profilePairs)
@@ -153,17 +155,6 @@ final class UsageStatsModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-}
-
-private extension Array {
-    func asyncMap<T>(_ transform: (Element) async -> T) async -> [T] {
-        var results: [T] = []
-        results.reserveCapacity(count)
-        for element in self {
-            results.append(await transform(element))
-        }
-        return results
     }
 }
 
