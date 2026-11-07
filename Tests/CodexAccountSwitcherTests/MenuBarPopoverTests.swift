@@ -19,7 +19,7 @@ struct MenuBarPopoverTests {
             await model.setShowsFiveHourUsage(expandedUsage)
             let updater = AppUpdater()
             let host = NSHostingController(rootView: MenuBarPopover(
-                model: model, updater: updater, tiboForecast: TiboForecastModel()
+                model: model, updater: updater
             ))
             let maximumSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
             let manageSize = NSHostingController(rootView: ManageAccountsView(model: model, onBack: {}))

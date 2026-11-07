@@ -10,7 +10,7 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, @preconc
     @Published private(set) var canCheckForUpdates = false
     @Published private(set) var isInstalling = false
     @Published private(set) var lastError: String?
-    var automaticallyChecks: Bool { controller?.updater.automaticallyChecksForUpdates ?? true }
+    var automaticallyChecks: Bool { controller?.updater.automaticallyChecksForUpdates ?? false }
 
     var accountOperationInProgress = false {
         didSet {
@@ -30,7 +30,7 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, @preconc
     }
 
     func start() {
-        guard controller == nil else { return }
+        guard controller == nil, Bundle.main.object(forInfoDictionaryKey: "SwitcherDisableUpdates") as? Bool != true else { return }
         let controller = SPUStandardUpdaterController(
             startingUpdater: false, updaterDelegate: self, userDriverDelegate: self
         )

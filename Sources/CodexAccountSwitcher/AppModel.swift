@@ -42,7 +42,22 @@ final class AppModel: AccountController, @MainActor ObservableObject {
     }
 
     static func live() -> AppModel {
-        let store = AccountStore()
+        // Resolve portable bundle settings against the current user at runtime.
+        let config = Bundle.main.object(forInfoDictionaryKey: "LSEnvironment") as? [String: String]
+        let store: AccountStore
+        if config?["SWITCHER_SHARED_DESKTOP_MODE"] == "1",
+           let home = config?["CODEX_HOME"], let directory = config?["SWITCHER_DATA_DIR_NAME"] {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            store = AccountStore(baseURL: support.appending(path: directory), activeHomeURL: URL(fileURLWithPath: home),
+                                 sharedDesktopMode: true)
+        } else if let directory = ProcessInfo.processInfo.environment["SWITCHER_DATA_DIR_NAME"]
+                    ?? (Bundle.main.object(forInfoDictionaryKey: "SwitcherDataDirectoryName") as? String),
+                  !directory.isEmpty, directory != ".", directory != "..", !directory.contains("/") {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            store = AccountStore(baseURL: support.appending(path: directory), sharedDesktopMode: true)
+        } else {
+            store = AccountStore(sharedDesktopMode: true)
+        }
         let codex = CodexClient()
         return AppModel(store: store, codex: codex,
                         switchService: SwitchService(desktop: DesktopController(), store: store, codex: CredentialIdentity()))

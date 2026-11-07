@@ -48,7 +48,7 @@ public enum SubscriptionSnapshotReader {
         return SubscriptionSnapshot(activeUntil: activeUntil, lastChecked: lastChecked)
     }
 
-    private static func decodePayload(_ token: String) -> [String: Any]? {
+    static func decodePayload(_ token: String) -> [String: Any]? {
         let parts = token.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 3 else { return nil }
         var encoded = String(parts[1]).replacingOccurrences(of: "-", with: "+")
@@ -58,7 +58,7 @@ public enum SubscriptionSnapshotReader {
         return (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any]
     }
 
-    private static func parseDate(_ text: String) -> Date? {
+    static func parseDate(_ text: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let value = formatter.date(from: text) { return value }

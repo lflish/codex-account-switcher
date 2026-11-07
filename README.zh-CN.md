@@ -1,3 +1,5 @@
+> **Community 分支预览：** [v0.2.0-rc.1](https://github.com/lflish/codex-account-switcher/releases/tag/v0.2.0-rc.1) 是独立的 macOS arm64 预发布版，包含原生额度面板。请先阅读[发布说明](docs/community-release.md)，了解临时签名、独立数据目录及验收限制。下方项目介绍与稳定版下载链接属于上游项目。
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/account-switcher-logo-white.png">

@@ -20,6 +20,7 @@ open class AccountController {
 
     private let store: AccountStore
     public var usageStatsStore: AccountStore { store }
+    public var sharedDesktopMode: Bool { store.sharedDesktopMode }
     private let codex: any AccountClient
     private let switchService: any SwitchServicing
     private var hasStarted = false
@@ -70,11 +71,11 @@ open class AccountController {
             try await syncActiveIdentity()
             await refreshSubscriptionSnapshots()
             do {
-                apply(try await store.loadUsageCache())
+                if !sharedDesktopMode { apply(try await store.loadUsageCache()) }
             } catch {
                 showError(error)
             }
-            if settings.autoResetEnabled {
+            if !sharedDesktopMode, settings.autoResetEnabled {
                 try await beginAutoReset(event: "resumed")
             }
         } catch {
@@ -154,6 +155,8 @@ open class AccountController {
         }
         guard !Task.isCancelled else { return }
         await refreshSubscriptionSnapshots()
+        // Keep registering desktop logins on each poll without refreshing a copied session.
+        guard !sharedDesktopMode else { return }
         await withTaskGroup(of: UsageRefreshResult.self) { group in
             for account in accounts {
                 group.addTask { [store, codex] in
@@ -341,6 +344,7 @@ open class AccountController {
     }
 
     public func setAutoResetEnabled(_ enabled: Bool) async {
+        guard !sharedDesktopMode || !enabled else { return }
         do {
             var updated = settings
             updated.autoResetEnabled = enabled

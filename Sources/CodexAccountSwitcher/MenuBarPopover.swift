@@ -5,7 +5,6 @@ import SwiftUI
 struct MenuBarPopover: View {
     @ObservedObject var model: AppModel
     @ObservedObject var updater: AppUpdater
-    @ObservedObject var tiboForecast: TiboForecastModel
     @State private var page: PopoverPage = .accounts
 
     var body: some View {
@@ -52,7 +51,6 @@ struct MenuBarPopover: View {
         .frame(width: 400)
         .onAppear {
             page = model.isAddingAccount ? .manageAccounts : .accounts
-            Task { await tiboForecast.refreshIfDue() }
         }
         .task {
             await model.start()
@@ -62,6 +60,10 @@ struct MenuBarPopover: View {
 
     private var accountPage: some View {
         VStack(spacing: 0) {
+            if model.sharedDesktopMode {
+                Text(model.text("shared_desktop_quota_paused"))
+                    .font(.caption).foregroundStyle(.secondary).padding(6)
+            }
             if !model.activeIdentityConfirmed {
                 HStack(spacing: 8) {
                     Text(model.text("active_unconfirmed"))
@@ -101,9 +103,6 @@ struct MenuBarPopover: View {
                 // Ignore the initial zero-height probe and the previous page's height.
                 .fixedSize(horizontal: false, vertical: true)
             }
-
-            Divider()
-            TiboForecastEntry(model: model, forecastModel: tiboForecast)
 
             if let version = updater.availableVersion {
                 Divider()

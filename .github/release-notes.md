@@ -1,11 +1,10 @@
-## 中文
+# v0.2.0-rc.1 — macOS Community preview
 
-- 修复 Windows 版 Codex Desktop 关闭窗口后仍留在托盘、导致账号切换超时的问题。确认切换后，结束对应安装的 Desktop 及其子进程，确认退出后再更换账号凭据并重新打开 Desktop。
-- 保留独立启动的 CLI 和其他路径下的同名程序，并在切换确认中说明任务中断及未保存状态可能丢失。
-- macOS 保持原有正常退出流程。自动使用 reset 的行为保持不变。
+- One native menu-bar panel for accounts, Today / 7-day / 30-day Token totals and per-account usage, including trillion-scale formatting.
+- Read-only live five-hour / weekly quota, reset dates, reset-card availability / expiry and clear cached / unavailable states. Quota percentages are not remaining Token counts; daily Token reports may stop at yesterday.
+- Email identity, explicit native switch confirmation, current-account colored weekly progress and an original application / menu icon.
+- Shared Desktop credential protection avoids background session refresh and automatic reset; explicit switching retains confirmation and graceful Desktop exit.
 
-## English
+This fork preview is macOS arm64 only (macOS 14 minimum); Windows has not been built or validated for this preview. The app is ad hoc signed, without Apple Developer ID signing or notarization. It uses a separate Community bundle and data directory, contains no accounts or credentials, and does not use the upstream automatic-update feed. Installing the archive does not migrate existing profiles. The current Desktop login is registered automatically at startup; add other accounts explicitly.
 
-- Fix Windows account-switch timeouts when Codex Desktop remains in the tray after its window closes. After confirmation, terminate the matching Desktop installation and its descendants, verify exit, then replace credentials and reopen Desktop.
-- Preserve independently launched CLI sessions and unrelated same-name executables. The confirmation explains interrupted tasks and possible unsaved-state loss.
-- Keep the macOS normal quit flow and automatic reset behavior unchanged.
+A real Desktop account handoff has not been performed for this release; automated fixture checks do not establish that end-to-end result. No reset redemption is offered by the new quota display. Upstream stable releases and their signed update channel remain separate.

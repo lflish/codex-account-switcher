@@ -83,6 +83,7 @@ struct SettingsView: View {
                     set: { enabled in Task { await model.setAutoResetEnabled(enabled) } }
                 ))
             }
+            .disabled(model.sharedDesktopMode)
             VStack(alignment: .leading, spacing: 6) {
                 Text(model.text("auto_reset_hint"))
                     .foregroundStyle(.secondary)

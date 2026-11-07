@@ -3,13 +3,22 @@ import AppKit
 import SwiftUI
 
 @main
+enum SwitcherLauncher {
+    @MainActor static func main() {
+        let application = NSApplication.shared
+        let delegate = SwitcherAppDelegate()
+        application.delegate = delegate
+        application.setActivationPolicy(.accessory)
+        withExtendedLifetime(delegate) { application.run() }
+    }
+}
+
 struct SwitcherApp: App {
     @NSApplicationDelegateAdaptor(SwitcherAppDelegate.self) private var appDelegate
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarPopover(model: appDelegate.model, updater: appDelegate.updater,
-                           tiboForecast: appDelegate.tiboForecast)
+            MenuBarPopover(model: appDelegate.model, updater: appDelegate.updater)
         } label: {
             MenuBarStatusLabel(model: appDelegate.model, updater: appDelegate.updater)
         }
@@ -54,10 +63,10 @@ private struct MenuBarStatusLabel: View {
     }
 }
 
-private struct MenuBarLogo: View {
+struct MenuBarLogo: View {
     private static let logicalSize = NSSize(width: 17.5, height: 17.5)
 
-    private static let image: NSImage = {
+    static let image: NSImage = {
         let resourceBundleName = "CodexAccountSwitcher_CodexAccountSwitcher.bundle"
         let resourceBundle = [Bundle.main.resourceURL, Bundle.main.bundleURL]
             .compactMap { $0 }

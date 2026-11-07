@@ -32,6 +32,20 @@ public struct ProfileCredentialTokens: Sendable {
         return value
     }
 
+    // Only used to order two local credential files for an already matched account.
+    static func preferSaved(_ saved: Data, over incoming: Data) -> Bool {
+        func timestamps(_ data: Data) -> (issued: TimeInterval, refreshed: Date)? {
+            guard let auth = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let tokens = auth["tokens"] as? [String: Any], let token = tokens["access_token"] as? String,
+                  let issued = SubscriptionSnapshotReader.decodePayload(token)?["iat"] as? TimeInterval
+            else { return nil }
+            return (issued, (auth["last_refresh"] as? String).flatMap(SubscriptionSnapshotReader.parseDate) ?? .distantPast)
+        }
+        guard let prior = timestamps(saved) else { return false }
+        guard let next = timestamps(incoming) else { return true }
+        return next <= prior
+    }
+
     private struct AuthCredential: Decodable {
         let tokens: AuthTokens?
     }

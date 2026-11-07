@@ -4,6 +4,41 @@ import Testing
 
 @MainActor
 struct AccountControllerTests {
+    @Test func sharedDesktopPollRegistersLoginsWithoutRefreshingQuotaOrReplacingANewerCredential() async throws {
+        let fixture = try ControllerFixture(sharedDesktopMode: true)
+        defer { fixture.model.stopBackgroundUsageRefresh(); fixture.clean() }
+        let active = fixture.active.appendingPathComponent("auth.json")
+        func bytes(_ account: String, issued: Int) throws -> Data {
+            let claims = try JSONSerialization.data(withJSONObject: ["iat": issued]).base64EncodedString()
+            return try JSONSerialization.data(withJSONObject: ["tokens": [
+                "account_id": account, "access_token": "test.\(claims).test"
+            ]])
+        }
+        let newer = try bytes("first", issued: 200)
+        try newer.write(to: active)
+        await fixture.model.startBackgroundUsageRefresh(every: .seconds(3600))
+        await fixture.model.waitForWeeklyUsageRefresh()
+        let first = try #require(fixture.model.activeAccountID)
+        let profile = await fixture.store.profileHome(id: first).appendingPathComponent("auth.json")
+        let older = try bytes("first", issued: 100)
+        try older.write(to: active)
+        fixture.model.refreshWeeklyUsage()
+        await fixture.model.waitForWeeklyUsageRefresh()
+        try await fixture.store.saveCurrentCredential()
+        #expect(try Data(contentsOf: profile) == newer)
+        #expect(try Data(contentsOf: active) == older)
+        try await fixture.store.activateTargetCredential(id: first)
+        #expect(try Data(contentsOf: active) == newer)
+        try await fixture.store.restoreActiveCredential(id: first)
+        #expect(try Data(contentsOf: active) == older)
+        try bytes("second", issued: 300).write(to: active)
+        fixture.model.refreshWeeklyUsage()
+        await fixture.model.waitForWeeklyUsageRefresh()
+        #expect(fixture.model.accounts.count == 2)
+        #expect(fixture.model.activeAccountID != first)
+        #expect(await fixture.client.usageReads == 0)
+    }
+
     @Test func firstActivationInstallsAndCommitsTheSavedAccount() async throws {
         let fixture = try ControllerFixture()
         defer { fixture.clean() }
@@ -291,11 +326,11 @@ private struct ControllerFixture {
     let store: AccountStore
     let client: FixtureClient
     let model: AccountController
-    init() throws {
+    init(sharedDesktopMode: Bool = false) throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("switcher-core-test-\(UUID())")
         active = root.appendingPathComponent("active")
         try FileManager.default.createDirectory(at: active, withIntermediateDirectories: true)
-        store = AccountStore(baseURL: root.appendingPathComponent("store"), activeHomeURL: active)
+        store = AccountStore(baseURL: root.appendingPathComponent("store"), activeHomeURL: active, sharedDesktopMode: sharedDesktopMode)
         client = FixtureClient()
         model = AccountController(store: store, codex: client,
             switchService: SwitchService(desktop: FixtureDesktop(), store: store, codex: client))
@@ -312,6 +347,7 @@ private struct ControllerFixture {
 }
 
 private actor FixtureClient: AccountClient {
+    private(set) var usageReads = 0
     private(set) var identityReads = 0
     private var usageFails = false
     private var resetExpiry: Date?
@@ -336,6 +372,7 @@ private actor FixtureClient: AccountClient {
         return AccountIdentity(accountID: "demo-account", email: "demo@example.test")
     }
     func readWeeklyUsage(profileHome: URL) async throws -> WeeklyUsage {
+        usageReads += 1
         if usageFails { throw CodexClientError.connectionClosed }
         let resetConsumed = consumedHomes.contains(profileHome)
         return WeeklyUsage(

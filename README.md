@@ -1,3 +1,5 @@
+> **Community fork preview:** [v0.2.0-rc.1](https://github.com/lflish/codex-account-switcher/releases/tag/v0.2.0-rc.1) is a separate macOS arm64 prerelease with the native quota panel. See [Community release details](docs/community-release.md) for its ad hoc signing, isolated data directory and validation limits. The project introduction and stable download links below describe the upstream project.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/account-switcher-logo-white.png">

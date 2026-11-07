@@ -17,12 +17,14 @@ final class UsageStatsModel: ObservableObject {
     @Published var overview: UsageStatsOverview?
     @Published var singleOverview: SingleAccountOverview?
     @Published var syncResults: [AccountSyncResult] = []
+    @Published private(set) var syncStatuses: [String: AccountSyncStatus] = [:]
     @Published var errorMessage: String?
 
     private let store: AccountStore
     private let statsStore: UsageStatsStore
     private let service: UsageStatsService
     private let language: AppLanguage
+    private var refreshPending = false
 
     init(store: AccountStore, accounts: [AccountProfile], language: AppLanguage,
          transport: (any UsageStatsTransport)? = nil) {
@@ -68,19 +70,22 @@ final class UsageStatsModel: ObservableObject {
     }
 
     func refresh() async {
+        guard !isLoading else { refreshPending = true; return }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
-        var profilePairs: [(profile: AccountProfile, profileHome: URL)] = []
-        profilePairs.reserveCapacity(accounts.count)
-        for account in accounts {
-            let home = await store.profileHome(id: account.id)
-            profilePairs.append((profile: account, profileHome: home))
-        }
-
-        syncResults = await service.sync(accounts: profilePairs)
-        await recompute()
+        repeat {
+            refreshPending = false
+            var profilePairs: [(profile: AccountProfile, profileHome: URL)] = []
+            profilePairs.reserveCapacity(accounts.count)
+            for account in accounts {
+                let home = await store.profileHome(id: account.id)
+                profilePairs.append((profile: account, profileHome: home))
+            }
+            syncResults = await service.sync(accounts: profilePairs)
+            await recompute()
+        } while refreshPending && !Task.isCancelled
     }
 
     func loadCached() async {
@@ -89,7 +94,11 @@ final class UsageStatsModel: ObservableObject {
 
     private func recompute() async {
         do {
-            let stored = try await service.load()
+            var stored = try await service.load()
+            let currentAccountIDs = Set(accounts.compactMap(\.accountID))
+            stored.accounts = stored.accounts.filter { currentAccountIDs.contains($0.key) }
+            stored.syncStatuses = stored.syncStatuses.filter { currentAccountIDs.contains($0.key) }
+            syncStatuses = stored.syncStatuses
             let displayNames = buildDisplayNames(stored: stored)
 
             if let selectedID = selectedAccountID,

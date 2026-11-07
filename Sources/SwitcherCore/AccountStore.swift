@@ -23,19 +23,23 @@ public protocol AccountStoring: Sendable {
 public actor AccountStore: AccountStoring {
     public nonisolated let baseURL: URL
     public nonisolated let activeHomeURL: URL
+    public nonisolated let sharedDesktopMode: Bool
 
     private let fileManager: FileManager
     private let legacyBaseURL: URL?
     private var registry: AccountRegistry?
     private var usageCache: UsageCache?
+    private var originalForRestore: (id: UUID, bytes: Data)?
 
     public init(
         baseURL: URL? = nil,
         legacyBaseURL: URL? = nil,
         activeHomeURL: URL? = nil,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        sharedDesktopMode: Bool = false
     ) {
         self.fileManager = fileManager
+        self.sharedDesktopMode = sharedDesktopMode
         #if os(Windows)
         let applicationSupportURL = URL(fileURLWithPath: ProcessInfo.processInfo.environment["LOCALAPPDATA"]
             ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("AppData/Local").path)
@@ -255,7 +259,7 @@ public actor AccountStore: AccountStoring {
         let current = try loadRegistry()
         if let profile = current.accounts.first(where: { identity.matches($0) }) {
             let destination = profileHome(id: profile.id).appending(path: "auth.json")
-            if try readChecked(destination) != bytes { try secureAtomicWrite(bytes, to: destination) }
+            try updateSavedCredential(bytes, at: destination)
             if current.activeAccountID != profile.id { try commitActiveAccountID(profile.id) }
         } else {
             let candidate = AccountProfile(id: UUID(), displayName: identity.suggestedDisplayName,
@@ -325,7 +329,18 @@ public actor AccountStore: AccountStoring {
         guard fileManager.fileExists(atPath: source.path) else {
             throw AccountStoreError.activeCredentialMissing
         }
-        try copyCredential(from: source, to: profileHome(id: activeID).appending(path: "auth.json"))
+        let bytes = try readChecked(source)
+        try updateSavedCredential(bytes, at: profileHome(id: activeID).appending(path: "auth.json"))
+        if sharedDesktopMode { originalForRestore = (activeID, bytes) }
+    }
+
+    private func updateSavedCredential(_ incoming: Data, at destination: URL) throws {
+        if fileManager.fileExists(atPath: destination.path) {
+            let saved = try readChecked(destination)
+            guard incoming != saved else { return }
+            if sharedDesktopMode, ProfileCredentialTokens.preferSaved(saved, over: incoming) { return }
+        }
+        try secureAtomicWrite(incoming, to: destination)
     }
 
     public func activateTargetCredential(id: UUID) throws {
@@ -338,6 +353,11 @@ public actor AccountStore: AccountStoring {
     }
 
     public func restoreActiveCredential(id: UUID) throws {
+        if let original = originalForRestore, original.id == id {
+            try secureAtomicWrite(original.bytes, to: activeHomeURL.appending(path: "auth.json"))
+            originalForRestore = nil
+            return
+        }
         try installCredential(id: id)
     }
 
@@ -362,6 +382,7 @@ public actor AccountStore: AccountStoring {
         current.activeAccountID = id
         current.accounts[index].lastUsedAt = Date()
         try saveRegistry(current)
+        originalForRestore = nil
     }
 
     private func saveRegistry(_ value: AccountRegistry) throws {
