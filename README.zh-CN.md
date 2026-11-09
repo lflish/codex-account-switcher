@@ -33,7 +33,15 @@
   <a href="README.md">English</a> · 中文
 </p>
 
-![原生 macOS Codex Account Switcher 在菜单栏中展示三个虚构 Codex 账号、用量和账号切换功能](assets/codex-account-switcher-hero.zh-CN.png)
+<p align="center">
+  <img src="assets/community-macos-panel.png" width="400" height="664" alt="macOS Community 原生面板，展示三个虚构账号、昨日／7 天／30 天 Token 统计、剩余额度和重置卡">
+  <br>
+  <em>当前 Community macOS 源码的原生主面板，使用虚构账号和示例数据离屏渲染，额度条在图中呈灰色。包含 <code>v0.2.0-rc.1</code> 之后的改动。</em>
+</p>
+
+选择「昨日」「7 天」或「30 天」查看所选周期内已上报的 Token 用量。5 小时和每周的百分比表示剩余额度，额度重置时间与可用重置卡单独显示。尚未上报的用量会显示为缺少数据，已上报的零用量会显示为 0。详见 [Token 统计口径](docs/usage-stats.md)。
+
+Community 预览版仅支持 Apple Silicon，采用临时签名，未通过 Apple 公证。它使用独立的 Switcher 数据目录，未提供签名的 Sparkle 更新源。安装及源码构建方法见 [Community 发布说明](docs/community-release.md)。
 
 <p align="center">
   <a href="#下载">安装说明</a> &nbsp; / &nbsp;

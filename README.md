@@ -33,7 +33,15 @@
   English · <a href="README.zh-CN.md">中文</a>
 </p>
 
-![Native macOS Codex Account Switcher showing three fictional Codex profiles, usage, and account switching from the menu bar](assets/codex-account-switcher-hero.png)
+<p align="center">
+  <img src="assets/community-macos-panel.png" width="400" height="664" alt="Native macOS Community panel with three fictional accounts, the Yesterday view, Token totals, remaining quotas, and reset cards">
+  <br>
+  <em>Chinese-language view of the current native Community macOS panel, rendered offscreen with fictional accounts and example data. Native quota bars appear gray in this render. Includes changes made after <code>v0.2.0-rc.1</code>.</em>
+</p>
+
+Choose Yesterday, 7 days, or 30 days to see Token usage for the selected period, summed from the days the service has reported. The 5-hour and weekly percentages show remaining quota. Reset times and available reset cards are shown separately. Unreported usage is shown as missing data. A reported zero is displayed as zero. See [how usage is counted](docs/usage-stats.md).
+
+The Community preview is Apple Silicon only, ad hoc signed, and not notarized. It keeps a separate Switcher data directory and does not publish a signed Sparkle update feed. See the [Community release details](docs/community-release.md) for installation and source build instructions.
 
 <p align="center">
   <a href="#download">Installation</a> &nbsp; / &nbsp;
