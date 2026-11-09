@@ -26,7 +26,7 @@ The API does **not** provide:
 ## Date Handling
 
 - Daily bucket `start_date` labels are used as-is from the upstream API. No timezone re-bucketing is performed.
-- "Today" is determined by the selected display timezone (default: Asia/Shanghai) compared against bucket labels.
+- The macOS switcher offers Yesterday, 7 days, and 30 days. Yesterday matches the previous calendar date in the display timezone (default: Asia/Shanghai) against the upstream bucket label. The 7- and 30-day ranges include today.
 - The UI notes: "Daily data is aggregated by the upstream service."
 
 ## Aggregation Rules

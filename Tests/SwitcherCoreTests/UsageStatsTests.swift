@@ -570,3 +570,21 @@ private let utcTZ = TimeZone(identifier: "UTC")!
         }
     }
 }
+
+@Suite struct YesterdayRangeTests {
+    @Test func yesterdayUsesShanghaiCalendarAcrossYearBoundary() {
+        let now = ISO8601DateFormatter().date(from: "2026-12-31T16:30:00Z")!
+        #expect(UsageStatsAggregation.dateLabelsForRange(.yesterday, timeZone: shanghaiTZ, now: now) == ["2026-12-31"])
+    }
+    @Test func yesterdayExcludesTodayAndPreservesMissingVersusZero() {
+        let now = ISO8601DateFormatter().date(from: "2026-11-01T05:00:00Z")!
+        let stats = AccountUsageStats(accountID: "test", dailyBuckets: [DayBucket(dateLabel: "2026-10-31", tokens: 0), DayBucket(dateLabel: "2026-11-01", tokens: 999)])
+        let result = UsageStatsAggregation.overview(accounts: ["test": stats], syncStatuses: ["test": .synced(fetchedAt: now)], displayNames: [:], range: .yesterday, timeZone: shanghaiTZ, now: now, totalAccountCount: 1)
+        #expect(result.totalTokens == 0)
+        #expect(result.dailySeries == [DayBucket(dateLabel: "2026-10-31", tokens: 0)])
+        #expect(result.missingDates.isEmpty)
+        let missing = UsageStatsAggregation.overview(accounts: [:], syncStatuses: [:], displayNames: [:], range: .yesterday, timeZone: shanghaiTZ, now: now, totalAccountCount: 1)
+        #expect(missing.dailySeries.isEmpty)
+        #expect(missing.missingDates == ["2026-10-31"])
+    }
+}

@@ -4,6 +4,7 @@ import Foundation
 
 public enum UsageStatsDateRange: Equatable, Sendable {
     case today
+    case yesterday
     case lastDays(Int)  // 7 or 30, includes today, counting backwards
     case custom(startLabel: String, endLabel: String)
 }
@@ -191,6 +192,10 @@ public enum UsageStatsAggregation {
         switch range {
         case .today:
             return [formatter.string(from: now)]
+
+        case .yesterday:
+            guard let date = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)) else { return [] }
+            return [formatter.string(from: date)]
 
         case .lastDays(let count):
             let today = calendar.startOfDay(for: now)

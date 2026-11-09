@@ -37,13 +37,13 @@ struct CompactSwitcherPanel: View {
                 }
 
                 Picker("统计周期", selection: $range) {
-                    Text("今日").tag(0)
+                    Text("昨日").tag(0)
                     Text("7 天").tag(7)
                     Text("30 天").tag(30)
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: range) { _, value in
-                    stats.dateRange = value == 0 ? .today : .lastDays(value)
+                    stats.dateRange = value == 0 ? .yesterday : .lastDays(value)
                     Task { await stats.loadCached() }
                 }
 
@@ -94,7 +94,7 @@ struct CompactSwitcherPanel: View {
                 }
                 .font(.system(size: 10))
             }
-            .padding(18)
+            .padding(16)
         }
         .frame(width: 400, height: 680)
         .task {
@@ -140,11 +140,10 @@ struct CompactSwitcherPanel: View {
         let entry = stats.overview?.accountBreakdown.first { $0.accountID == account.accountID }
         let email = account.email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let title = email.isEmpty ? account.displayName : email
-        let showsAlias = !email.isEmpty && email.caseInsensitiveCompare(account.displayName) != .orderedSame
         let subscriptionHelp = model.subscriptionSnapshots[account.id].map {
             "订阅至 \($0.activeUntil.formatted(.dateTime.year().month().day()))（登录快照，非实时账单查询）"
         } ?? "暂无订阅到期日快照"
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 8) {
           HStack(spacing: 10) {
             Image(systemName: active ? "checkmark.circle.fill" : "person.crop.circle")
                 .foregroundStyle(active ? Color.accentColor : Color.secondary)
@@ -156,11 +155,8 @@ struct CompactSwitcherPanel: View {
                     .truncationMode(.middle)
                     .help(title + "\n" + subscriptionHelp)
                 HStack(spacing: 6) {
-                    if showsAlias {
-                        Text(account.displayName).font(.system(size: 9)).foregroundStyle(.secondary)
-                    }
                     if active {
-                        Text("Codex 正在使用").font(.system(size: 9)).foregroundStyle(.secondary)
+                        Text("当前").font(.system(size: 9)).foregroundStyle(.secondary)
                     } else {
                         Button("切换") { confirmSwitch(to: account) }
                             .font(.system(size: 10))
@@ -188,7 +184,7 @@ struct CompactSwitcherPanel: View {
               quotaSummary(account, now: context.date)
           }
         }
-        .padding(11)
+        .padding(10)
         .frame(maxWidth: .infinity)
         .background(active ? Color.accentColor.opacity(0.07) : Color.primary.opacity(0.025),
                     in: RoundedRectangle(cornerRadius: 10))
@@ -297,8 +293,8 @@ struct CompactSwitcherPanel: View {
                     .controlSize(.small)
                     .tint(window.remainingPercent == 0 ? Color.clear
                           : state?.failure != nil ? Color.secondary
-                          : window.remainingPercent <= 10 ? .red
-                          : window.remainingPercent <= 25 ? .orange : .accentColor)
+                          : window.remainingPercent < 10 ? .red
+                          : window.remainingPercent < 50 ? .yellow : .accentColor)
                     .frame(height: 4)
                     .accessibilityLabel(title)
                     .accessibilityValue("\(window.remainingPercent)%")
@@ -306,9 +302,18 @@ struct CompactSwitcherPanel: View {
             if let resetsAt = window?.resetsAt {
                 Text("\(hasExpired ? "上期重置" : resetTitle) \(quotaDate(resetsAt))")
                     .font(.system(size: 9)).foregroundStyle(.secondary)
+                    .help(fullQuotaDate(resetsAt))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func fullQuotaDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = "yyyy年MM月dd日 HH:mm"
+        return formatter.string(from: date) + " 北京时间"
     }
 
     private func quotaDate(_ date: Date) -> String {
