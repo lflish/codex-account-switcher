@@ -5,20 +5,11 @@ import SwitcherCore
 /// The application uses one native popover for accounts and token usage.
 struct CompactSwitcherPanel: View {
     @ObservedObject var model: AppModel
-    @StateObject private var stats: UsageStatsModel
+    @ObservedObject var stats: UsageStatsModel
     @ObservedObject var quota: AccountQuotaModel
     let closePanel: () -> Void
     @State private var range = 7
     @State private var settingsExpanded = false
-
-    init(model: AppModel, quota: AccountQuotaModel, closePanel: @escaping () -> Void) {
-        self.model = model
-        self.closePanel = closePanel
-        _stats = StateObject(wrappedValue: UsageStatsModel(
-            store: model.usageStatsStore, accounts: model.accounts, language: model.settings.language
-        ))
-        self.quota = quota
-    }
 
     var body: some View {
         ScrollView {
@@ -97,11 +88,6 @@ struct CompactSwitcherPanel: View {
             .padding(16)
         }
         .frame(width: 400, height: 680)
-        .task {
-            stats.accounts = model.accounts
-            await stats.loadCached()
-            await stats.refresh()
-        }
         .onChange(of: model.accounts) { _, accounts in
             stats.accounts = accounts
             Task { await stats.refresh() }
@@ -225,7 +211,7 @@ struct CompactSwitcherPanel: View {
                     .font(.system(size: 9)).foregroundStyle(.orange)
             }
             if let snapshot = state?.snapshot {
-                Text("\(state?.failure == nil ? "更新于" : "缓存于") \(quotaDate(snapshot.fetchedAt))")
+                Text("\(state?.failure == nil ? "额度更新于" : "额度缓存于") \(quotaDate(snapshot.fetchedAt))")
                     .font(.system(size: 9)).foregroundStyle(.secondary)
             }
         }

@@ -13,6 +13,9 @@ final class SwitcherAppDelegate: NSObject, NSApplicationDelegate {
     let updater = AppUpdater()
 
     private lazy var quota = AccountQuotaModel(store: model.usageStatsStore)
+    private lazy var stats = UsageStatsModel(
+        store: model.usageStatsStore, accounts: model.accounts, language: model.settings.language
+    )
     private var quotaObservation: AnyCancellable?
     private var appearanceObservation: NSKeyValueObservation?
     private var displayClock: AnyCancellable?
@@ -62,13 +65,17 @@ final class SwitcherAppDelegate: NSObject, NSApplicationDelegate {
             let popover = NSPopover()
             popover.behavior = .transient
             popover.contentSize = NSSize(width: 400, height: 680)
-            popover.contentViewController = NSHostingController(rootView: CompactSwitcherPanel(model: model, quota: quota, closePanel: { [weak self] in self?.panel?.close() }))
+            popover.delegate = stats
+            popover.contentViewController = NSHostingController(rootView: CompactSwitcherPanel(
+                model: model, stats: stats, quota: quota, closePanel: { [weak self] in self?.panel?.close() }
+            ))
             panel = popover
         }
         if refreshQuota, !quota.isLoading {
             Task { await quota.refresh(accounts: model.accounts) }
         }
         NSApp.activate(ignoringOtherApps: true)
+        stats.accounts = model.accounts
         panel?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         panel?.contentViewController?.view.window?.makeKey()
 

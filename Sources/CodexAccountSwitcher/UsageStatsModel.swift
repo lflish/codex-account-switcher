@@ -6,7 +6,7 @@ import AppKit
 import UniformTypeIdentifiers
 
 @MainActor
-final class UsageStatsModel: ObservableObject {
+final class UsageStatsModel: NSObject, ObservableObject, NSPopoverDelegate {
     @Published var accounts: [AccountProfile] = []
     @Published var selectedAccountID: String? // nil = all accounts
     @Published var dateRange: UsageStatsDateRange = .lastDays(7)
@@ -66,6 +66,16 @@ final class UsageStatsModel: ObservableObject {
         case 1: return String(format: template, args[0])
         case 2: return String(format: template, args[0], args[1])
         default: return template
+        }
+    }
+
+    func popoverDidShow(_ notification: Notification) {
+        guard !isLoading else { return }
+        Task {
+            guard !isLoading else { return }
+            await loadCached()
+            guard !isLoading else { return }
+            await refresh()
         }
     }
 
