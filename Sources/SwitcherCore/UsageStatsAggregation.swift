@@ -11,6 +11,29 @@ public enum UsageStatsDateRange: Equatable, Sendable {
 
 // MARK: - Aggregation results
 
+/// Why an expected account did not contribute tokens to the selected range.
+public enum MissingAccountReason: Equatable, Sendable {
+    /// The account was dropped before aggregation because its sync status was not
+    /// usable (never synced, auth expired, or unavailable).
+    case notSynced
+    /// The account synced fine but upstream reported no bucket for this range —
+    /// the day is genuinely missing upstream, or the bucket has not landed yet.
+    case noDataForRange
+}
+
+/// An account that was expected to contribute to the total but did not.
+public struct MissingAccount: Equatable, Sendable {
+    public let accountID: String
+    public let displayName: String
+    public let reason: MissingAccountReason
+
+    public init(accountID: String, displayName: String, reason: MissingAccountReason) {
+        self.accountID = accountID
+        self.displayName = displayName
+        self.reason = reason
+    }
+}
+
 public struct UsageStatsOverview: Equatable, Sendable {
     public let totalTokens: Int
     /// Daily average = totalTokens / daysWithData (not calendar days in range).
@@ -22,6 +45,9 @@ public struct UsageStatsOverview: Equatable, Sendable {
     public let missingDates: [String]
     /// Per-account breakdown.
     public let accountBreakdown: [AccountBreakdownEntry]
+    /// Accounts that were expected but contributed nothing to this range, with why.
+    /// Non-empty means `totalTokens` is a lower bound, not the final figure.
+    public let missingAccounts: [MissingAccount]
     public let syncedCount: Int
     public let totalAccountCount: Int
     public let isPartial: Bool
@@ -34,6 +60,7 @@ public struct UsageStatsOverview: Equatable, Sendable {
         && lhs.dailySeries == rhs.dailySeries
         && lhs.missingDates == rhs.missingDates
         && lhs.accountBreakdown == rhs.accountBreakdown
+        && lhs.missingAccounts == rhs.missingAccounts
         && lhs.syncedCount == rhs.syncedCount
         && lhs.totalAccountCount == rhs.totalAccountCount
         && lhs.isPartial == rhs.isPartial
@@ -88,6 +115,18 @@ public enum UsageStatsAggregation {
         // Aggregate daily buckets across all synced accounts
         var dailyTotals: [String: Int] = [:]
         var accountTotals: [(id: String, tokens: Int, start: String?, end: String?)] = []
+        var missingAccounts: [MissingAccount] = []
+
+        // Accounts excluded entirely because their sync status is unusable
+        // (never synced, auth expired, unavailable). They contribute nothing,
+        // so the total is a lower bound while any of these exist.
+        for accountID in syncStatuses.keys where syncedAccounts[accountID] == nil {
+            missingAccounts.append(MissingAccount(
+                accountID: accountID,
+                displayName: displayNames[accountID] ?? accountID,
+                reason: .notSynced
+            ))
+        }
 
         for (accountID, stats) in syncedAccounts {
             let filtered = stats.dailyBuckets.filter { dateLabels.contains($0.dateLabel) }
@@ -101,6 +140,17 @@ public enum UsageStatsAggregation {
                 if end == nil || bucket.dateLabel > end! { end = bucket.dateLabel }
             }
             accountTotals.append((accountID, accountTotal, start, end))
+
+            // Synced, but nothing landed in this range: either upstream omitted the
+            // day or the bucket has not been published yet. Both make the total a
+            // lower bound, and neither is currently distinguishable from each other.
+            if filtered.isEmpty {
+                missingAccounts.append(MissingAccount(
+                    accountID: accountID,
+                    displayName: displayNames[accountID] ?? accountID,
+                    reason: .noDataForRange
+                ))
+            }
         }
 
         let totalTokens = dailyTotals.values.reduce(0, +)
@@ -132,6 +182,9 @@ public enum UsageStatsAggregation {
             if case .neverSynced = $0 { return true }; return false
         }.count
 
+        // Stable order so equal totals never reorder across refreshes.
+        let sortedMissing = missingAccounts.sorted { $0.displayName < $1.displayName }
+
         return UsageStatsOverview(
             totalTokens: totalTokens,
             dailyAverage: daysWithData > 0 ? totalTokens / daysWithData : 0,
@@ -139,9 +192,10 @@ public enum UsageStatsAggregation {
             dailySeries: dailySeries,
             missingDates: missingDates,
             accountBreakdown: breakdown,
+            missingAccounts: sortedMissing,
             syncedCount: syncedCount,
             totalAccountCount: totalAccountCount,
-            isPartial: neverSyncedCount > 0 || syncedCount < totalAccountCount
+            isPartial: !sortedMissing.isEmpty || neverSyncedCount > 0 || syncedCount < totalAccountCount
         )
     }
 

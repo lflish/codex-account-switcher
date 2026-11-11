@@ -98,12 +98,18 @@ struct CompactSwitcherPanel: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("全部账号 · 所选周期已用 Token").font(.system(size: 11)).foregroundStyle(.secondary)
             if let overview = stats.overview, !overview.dailySeries.isEmpty {
-                let reportedCount = overview.accountBreakdown.filter { $0.coverageStart != nil }.count
+                let reportedCount = overview.totalAccountCount - overview.missingAccounts.count
                 Text(TokenCountFormatter.compact(overview.totalTokens))
                     .font(.system(size: 30, weight: .semibold, design: .rounded)).monospacedDigit()
                     .help("\(TokenCountFormatter.exact(overview.totalTokens)) Token")
                 Text("已上报 \(overview.dailySeries.count) 天 · \(reportedCount)/\(overview.totalAccountCount) 个账号有上报")
                     .font(.system(size: 10)).foregroundStyle(.secondary)
+                if !overview.missingAccounts.isEmpty {
+                    // The headline number is a lower bound whenever an account is missing.
+                    // Say which account and why, so a later jump is explainable.
+                    Text("合计未包含 \(missingAccountsLabel(overview.missingAccounts))")
+                        .font(.system(size: 10)).foregroundStyle(.orange)
+                }
                 if stats.syncStatuses.values.contains(where: { if case .stale = $0 { true } else { false } }) {
                     Text("含缓存数据 · 部分账号刷新失败").font(.caption).foregroundStyle(.orange)
                 }
@@ -317,6 +323,16 @@ struct CompactSwitcherPanel: View {
         case .rateLimited: "额度请求过于频繁，请稍后重试"
         default: "额度刷新失败"
         }
+    }
+
+    private func missingAccountsLabel(_ missing: [MissingAccount]) -> String {
+        missing.map { entry in
+            let why = switch entry.reason {
+            case .notSynced: "未同步"
+            case .noDataForRange: "当期无数据"
+            }
+            return "\(entry.displayName)（\(why)）"
+        }.joined(separator: "、")
     }
 
     private func statusMessage(_ status: AccountSyncStatus) -> String? {
