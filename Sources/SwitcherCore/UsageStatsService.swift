@@ -59,8 +59,14 @@ public actor UsageStatsService {
                     merged = newStats
                 }
 
-                let status = AccountSyncStatus.synced(fetchedAt: Date())
+                let fetchedAt = Date()
+                let status = AccountSyncStatus.synced(fetchedAt: fetchedAt)
                 try await store.update(accountID: effectiveAccountID, stats: merged, status: status)
+                UsageStatsLog.synced(
+                    accountID: effectiveAccountID,
+                    buckets: merged.dailyBuckets.count,
+                    fetchedAt: fetchedAt
+                )
 
                 results.append(AccountSyncResult(
                     accountID: effectiveAccountID, profileID: profile.id,
@@ -87,6 +93,11 @@ public actor UsageStatsService {
                     existingStats = nil
                 }
                 try? await store.updateStatus(accountID: accountID, status: status)
+                UsageStatsLog.failed(
+                    accountID: accountID,
+                    status: Self.logLabel(for: status),
+                    reason: error.localizedDescription
+                )
 
                 results.append(AccountSyncResult(
                     accountID: accountID, profileID: profile.id,
@@ -96,6 +107,11 @@ public actor UsageStatsService {
                 let status = AccountSyncStatus.stale(fetchedAt: Date(), reason: error.localizedDescription)
                 let existingStats = try? await store.load().accounts[accountID]
                 try? await store.updateStatus(accountID: accountID, status: status)
+                UsageStatsLog.failed(
+                    accountID: accountID,
+                    status: Self.logLabel(for: status),
+                    reason: error.localizedDescription
+                )
 
                 results.append(AccountSyncResult(
                     accountID: accountID, profileID: profile.id,
@@ -105,5 +121,16 @@ public actor UsageStatsService {
         }
 
         return results
+    }
+
+    /// Stable, greppable status name for logs (avoids dumping associated values).
+    private static func logLabel(for status: AccountSyncStatus) -> String {
+        switch status {
+        case .synced: "synced"
+        case .stale: "stale"
+        case .authExpired: "authExpired"
+        case .unavailable: "unavailable"
+        case .neverSynced: "neverSynced"
+        }
     }
 }

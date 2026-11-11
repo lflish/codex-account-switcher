@@ -571,6 +571,83 @@ private let utcTZ = TimeZone(identifier: "UTC")!
     }
 }
 
+// MARK: - Coverage reporting
+
+/// Regression for the "yesterday total changed during the day" report: when an
+/// account drops out of the total, the overview must name it and say why, so the
+/// number is never silently short.
+@Suite struct UsageStatsCoverageTests {
+    private func stats(_ id: String, _ tokens: Int) -> AccountUsageStats {
+        AccountUsageStats(accountID: id, dailyBuckets: [DayBucket(dateLabel: "2026-11-10", tokens: tokens)])
+    }
+
+    @Test func completeCoverageReportsNoMissingAccounts() {
+        let overview = UsageStatsAggregation.overview(
+            accounts: ["a": stats("a", 560_917_051), "b": stats("b", 262_609_340), "c": stats("c", 338_994_125)],
+            syncStatuses: [
+                "a": .synced(fetchedAt: Date()),
+                "b": .synced(fetchedAt: Date()),
+                "c": .synced(fetchedAt: Date()),
+            ],
+            displayNames: ["a": "A", "b": "B", "c": "C"],
+            range: .yesterday, timeZone: shanghaiTZ,
+            now: ISO8601DateFormatter().date(from: "2026-11-11T09:36:00Z")!,
+            totalAccountCount: 3
+        )
+
+        #expect(overview.totalTokens == 1_162_520_516)
+        #expect(overview.missingAccounts.isEmpty)
+        #expect(!overview.isPartial)
+    }
+
+    @Test func unsyncedAccountIsNamedNotSilentlyDropped() {
+        let overview = UsageStatsAggregation.overview(
+            accounts: ["a": stats("a", 560_917_051), "b": stats("b", 262_609_340), "c": stats("c", 338_994_125)],
+            syncStatuses: [
+                "a": .synced(fetchedAt: Date()),
+                "b": .synced(fetchedAt: Date()),
+                "c": .unavailable(reason: "timeout"),
+            ],
+            displayNames: ["a": "A", "b": "B", "c": "s9whr"],
+            range: .yesterday, timeZone: shanghaiTZ,
+            now: ISO8601DateFormatter().date(from: "2026-11-11T09:36:00Z")!,
+            totalAccountCount: 3
+        )
+
+        // Reproduces the reported symptom: the total is short by exactly account c.
+        #expect(overview.totalTokens == 823_526_391)
+        #expect(overview.missingAccounts.count == 1)
+        #expect(overview.missingAccounts.first?.accountID == "c")
+        #expect(overview.missingAccounts.first?.displayName == "s9whr")
+        #expect(overview.missingAccounts.first?.reason == .notSynced)
+        #expect(overview.isPartial)  // headline number must read as a lower bound
+    }
+
+    @Test func syncedAccountWithNoBucketInRangeIsDistinguished() {
+        let lagging = AccountUsageStats(
+            accountID: "c",
+            dailyBuckets: [DayBucket(dateLabel: "2026-11-08", tokens: 9_999)]
+        )
+        let overview = UsageStatsAggregation.overview(
+            accounts: ["a": stats("a", 560_917_051), "b": stats("b", 262_609_340), "c": lagging],
+            syncStatuses: [
+                "a": .synced(fetchedAt: Date()),
+                "b": .synced(fetchedAt: Date()),
+                "c": .synced(fetchedAt: Date()),
+            ],
+            displayNames: ["a": "A", "b": "B", "c": "C"],
+            range: .yesterday, timeZone: shanghaiTZ,
+            now: ISO8601DateFormatter().date(from: "2026-11-11T09:36:00Z")!,
+            totalAccountCount: 3
+        )
+
+        #expect(overview.missingAccounts.count == 1)
+        // Distinct from .notSynced: this account synced fine, the day is just absent.
+        #expect(overview.missingAccounts.first?.reason == .noDataForRange)
+        #expect(overview.isPartial)
+    }
+}
+
 @Suite struct YesterdayRangeTests {
     @Test func yesterdayUsesShanghaiCalendarAcrossYearBoundary() {
         let now = ISO8601DateFormatter().date(from: "2026-12-31T16:30:00Z")!
