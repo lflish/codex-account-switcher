@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
 #if os(Windows)
 import SwitcherPlatform
 #endif
@@ -39,6 +42,27 @@ public struct CredentialIdentity: CodexIdentityReading {
         }
     }
 
+    // Matches Desktop's authenticated-principal scope, not the token subject/email.
+    // This metadata never authenticates a request and is never logged.
+    static func rendererOwner(from data: Data) throws -> String {
+        #if canImport(CryptoKit)
+        do {
+            let credential = try JSONDecoder().decode(Credential.self, from: data)
+            guard let token = credential.tokens?.access_token else { throw CodexClientError.identityUnavailable }
+            let claims = try decodeClaims(token)
+            guard let account = nonempty(claims.auth?.chatgpt_account_id) ?? nonempty(claims.auth?.account_id),
+                  let user = nonempty(claims.auth?.user_id) ?? nonempty(claims.auth?.chatgpt_user_id),
+                  credential.tokens?.account_id == nil || credential.tokens?.account_id == account else {
+                throw CodexClientError.identityUnavailable
+            }
+            let input = try JSONSerialization.data(withJSONObject: [user, account], options: [.fragmentsAllowed, .withoutEscapingSlashes])
+            return SHA256.hash(data: input).map { String(format: "%02x", $0) }.joined()
+        } catch { throw CodexClientError.identityUnavailable }
+        #else
+        throw CodexClientError.identityUnavailable
+        #endif
+    }
+
     private static func nonempty(_ value: String?) -> String? {
         guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return value
@@ -58,6 +82,7 @@ public struct CredentialIdentity: CodexIdentityReading {
     private struct Tokens: Decodable {
         let account_id: String?
         let id_token: String?
+        let access_token: String?
     }
     private struct Claims: Decodable {
         let email: String?
@@ -67,5 +92,10 @@ public struct CredentialIdentity: CodexIdentityReading {
             case auth = "https://api.openai.com/auth"
         }
     }
-    private struct Auth: Decodable { let chatgpt_account_id: String? }
+    private struct Auth: Decodable {
+        let chatgpt_account_id: String?
+        let account_id: String?
+        let user_id: String?
+        let chatgpt_user_id: String?
+    }
 }

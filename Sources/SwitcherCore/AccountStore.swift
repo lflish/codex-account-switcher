@@ -30,6 +30,7 @@ public actor AccountStore: AccountStoring {
     private var registry: AccountRegistry?
     private var usageCache: UsageCache?
     private var originalForRestore: (id: UUID, bytes: Data)?
+    private var projectStateForRestore: (original: Data, installed: Data)?
 
     public init(
         baseURL: URL? = nil,
@@ -344,24 +345,28 @@ public actor AccountStore: AccountStoring {
     }
 
     public func activateTargetCredential(id: UUID) throws {
-        try installCredential(id: id)
+        try installCredential(id: id, preserveProjects: sharedDesktopMode)
     }
 
     public func clearActiveCredential() throws {
+        let projectError = projectRestorationError()
         try checkPath(activeHomeURL.appending(path: "auth.json"))
         try fileManager.removeItem(at: activeHomeURL.appending(path: "auth.json"))
+        if let projectError { throw projectError }
     }
 
     public func restoreActiveCredential(id: UUID) throws {
+        let projectError = projectRestorationError()
         if let original = originalForRestore, original.id == id {
             try secureAtomicWrite(original.bytes, to: activeHomeURL.appending(path: "auth.json"))
             originalForRestore = nil
-            return
+        } else {
+            try installCredential(id: id)
         }
-        try installCredential(id: id)
+        if let projectError { throw projectError }
     }
 
-    private func installCredential(id: UUID) throws {
+    private func installCredential(id: UUID, preserveProjects: Bool = false) throws {
         _ = try profile(id: id)
         let source = profileHome(id: id).appending(path: "auth.json")
         guard fileManager.fileExists(atPath: source.path) else {
@@ -371,7 +376,64 @@ public actor AccountStore: AccountStoring {
         try checkPath(activeHomeURL)
         try fileManager.createDirectory(at: activeHomeURL, withIntermediateDirectories: true)
         let destination = activeHomeURL.appending(path: "auth.json")
-        try copyCredential(from: source, to: destination)
+        let credential = try readChecked(source)
+        let stateURL = activeHomeURL.appending(path: ".codex-global-state.json")
+        let previousAuth = fileManager.fileExists(atPath: destination.path) ? try readChecked(destination) : nil
+        var projectChange: (original: Data, installed: Data)?
+        #if os(macOS)
+        // State inspection is optional for the original auth-only handoff. Never
+        // follow a private-state symlink or require renderer claims unless an
+        // explicit legacy snapshot actually needs migration.
+        if preserveProjects,
+           (try? checkProjectStatePath(stateURL)) != nil,
+           let previousState = try? readChecked(stateURL),
+           DesktopProjectRegistry.needsMigration(previousState) {
+            // Missing source credentials cannot establish which account owns parked globals.
+            guard let previousAuth else { throw DesktopProjectRegistryError.unsupportedState }
+            let sourceOwner = try CredentialIdentity.rendererOwner(from: previousAuth)
+            let targetOwner = try CredentialIdentity.rendererOwner(from: credential)
+            if let updated = try DesktopProjectRegistry.merging(previousState, sourceOwner: sourceOwner, targetOwner: targetOwner) {
+                projectChange = (previousState, updated)
+            }
+        }
+        #endif
+        try secureAtomicWrite(credential, to: destination)
+        do {
+            if let projectChange {
+                try checkProjectStatePath(stateURL)
+                guard try readChecked(stateURL) == projectChange.original else { throw DesktopProjectRegistryError.changedState }
+                try secureAtomicWrite(projectChange.installed, to: stateURL)
+                projectStateForRestore = projectChange
+            }
+        } catch {
+            // Files are individually atomic; a process crash between these writes is not
+            // a cross-file transaction. Old account snapshots remain intact in either case.
+            if let previousAuth { try secureAtomicWrite(previousAuth, to: destination) }
+            else { try fileManager.removeItem(at: destination) }
+            throw error
+        }
+    }
+
+    private func checkProjectStatePath(_ url: URL) throws {
+        let attributes = try fileManager.attributesOfItem(atPath: url.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              try url.deletingLastPathComponent().resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true else {
+            throw DesktopProjectRegistryError.unsupportedState
+        }
+    }
+
+    private func projectRestorationError() -> (any Error)? {
+        do { try restoreProjectState(); return nil }
+        catch { return error }
+    }
+
+    private func restoreProjectState() throws {
+        guard let state = projectStateForRestore else { return }
+        let url = activeHomeURL.appending(path: ".codex-global-state.json")
+        try checkProjectStatePath(url)
+        guard try readChecked(url) == state.installed else { throw DesktopProjectRegistryError.changedState }
+        try secureAtomicWrite(state.original, to: url)
+        projectStateForRestore = nil
     }
 
     public func commitActiveAccountID(_ id: UUID) throws {
@@ -383,6 +445,7 @@ public actor AccountStore: AccountStoring {
         current.accounts[index].lastUsedAt = Date()
         try saveRegistry(current)
         originalForRestore = nil
+        projectStateForRestore = nil
     }
 
     private func saveRegistry(_ value: AccountRegistry) throws {

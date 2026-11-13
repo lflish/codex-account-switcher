@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import OSLog
 import SwiftUI
 import SwitcherCore
 
@@ -13,6 +14,27 @@ final class SwitcherAppDelegate: NSObject, NSApplicationDelegate {
     let updater = AppUpdater()
 
     private lazy var quota = AccountQuotaModel(store: model.usageStatsStore)
+    private lazy var quotaRefresh = AccountQuotaRefreshScheduler(
+        canRefresh: { [weak self] in
+            guard let self else { return false }
+            return hasLoaded && !model.accounts.isEmpty && !quota.isLoading
+        },
+        refresh: { [weak self] in
+            guard let self else { return }
+            let startedAt = Date()
+            let accounts = model.accounts
+            await quota.refresh(accounts: accounts)
+            guard Self.usesDevEntry, !Task.isCancelled else { return }
+            let succeeded = accounts.filter {
+                let state = quota.states[$0.id]
+                return state?.failure == nil && (state?.snapshot?.fetchedAt ?? .distantPast) >= startedAt
+            }.count
+            let failed = accounts.filter { quota.states[$0.id]?.failure != nil }.count
+            let skipped = max(0, accounts.count - succeeded - failed)
+            Logger(subsystem: "local.codex-account-switcher.claude-verify", category: "QuotaRefresh")
+                .notice("Background quota refresh completed attempted=\(accounts.count, privacy: .public) success=\(succeeded, privacy: .public) failure=\(failed, privacy: .public) skipped=\(skipped, privacy: .public)")
+        }
+    )
     private lazy var stats = UsageStatsModel(
         store: model.usageStatsStore, accounts: model.accounts, language: model.settings.language
     )
@@ -36,7 +58,10 @@ final class SwitcherAppDelegate: NSObject, NSApplicationDelegate {
         updater.start()
         wakeObservation = NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
             .sink { [weak self] _ in
-                Task { @MainActor in self?.model.refreshWeeklyUsage() }
+                Task { @MainActor in
+                    self?.model.refreshWeeklyUsage()
+                    self?.quotaRefresh.requestRefresh()
+                }
             }
         installStatusItem()
         if statusItem != nil {
@@ -49,9 +74,16 @@ final class SwitcherAppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await model.startBackgroundUsageRefresh()
             hasLoaded = true
+            quotaRefresh.start()
             modelDidChange()
             showPanel(refreshQuota: false)
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        quotaRefresh.stop()
+        wakeObservation?.cancel()
+        displayClock?.cancel()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
